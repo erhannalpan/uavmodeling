@@ -1,0 +1,90 @@
+#include <cmath>
+#include <memory>
+
+#include "rclcpp/rclcpp.hpp"
+
+class QuadrotorModelNode : public rclcpp::Node
+{
+public:
+    QuadrotorModelNode()
+    : Node("quadrotor_model_node")
+    {
+        // Physical parameters
+        m_ = 1.0;
+        g_ = 9.81;
+        arm_length_ = 0.20;
+
+        jx_ = 0.01;
+        jy_ = 0.01;
+        jz_ = 0.02;
+
+        kf_ = 1.0e-5;
+        km_ = 2.0e-7;
+
+        tau_propeller_ = 0.12;
+
+        omega_min_ = 0.0;
+        omega_max_ = 1000.0;
+
+        // Hover speed
+        omega_hover_ = std::sqrt(
+            (m_ * g_) / (4.0 * kf_)
+        );
+
+        constexpr double pi = 3.14159265358979323846;
+
+        omega_hover_rpm_ =
+            omega_hover_ * 60.0 / (2.0 * pi);
+
+        RCLCPP_INFO(
+            this->get_logger(),
+            "Quadrotor model node started."
+        );
+
+        RCLCPP_INFO(
+            this->get_logger(),
+            "Hover speed: %.2f rad/s",
+            omega_hover_
+        );
+
+        RCLCPP_INFO(
+            this->get_logger(),
+            "Hover speed: %.2f RPM",
+            omega_hover_rpm_
+        );
+    }
+
+private:
+    double m_;
+    double g_;
+    double arm_length_;
+
+    double jx_;
+    double jy_;
+    double jz_;
+
+    double kf_;
+    double km_;
+
+    double tau_propeller_;
+
+    double omega_min_;
+    double omega_max_;
+
+    double omega_hover_;
+    double omega_hover_rpm_;
+};
+
+int main(int argc, char * argv[])
+{
+    rclcpp::init(argc, argv);
+
+    auto node =
+        std::make_shared<QuadrotorModelNode>();
+
+    rclcpp::spin(node);
+
+    rclcpp::shutdown();
+
+    return 0;
+}
