@@ -1,0 +1,36 @@
+source /opt/ros/jazzy/setup.bash
+source ~/ros2_ws/install/setup.bash
+
+ros2 run quadrotor_model quadrotor_model_node
+
+
+source /opt/ros/jazzy/setup.bash
+source ~/ros2_ws/install/setup.bash
+
+# Check the initial hover control input
+ros2 topic echo --once /quadrotor/control_input
+
+# Check the initial 12-state vector
+ros2 topic echo --once /quadrotor/state
+
+# Apply an approximately constant-thrust positive-pitch command
+# Motor order: [front, right, back, left]
+ros2 topic pub --once \
+/quadrotor/motor_commands \
+std_msgs/msg/Float64MultiArray \
+"{data: [520.0, 495.23, 469.15, 495.23]}"
+
+# Observe total thrust and body torques
+# Order: [F, tau_phi, tau_theta, tau_psi]
+ros2 topic echo --once /quadrotor/control_input
+
+# Observe the resulting states
+# Order: [pn, pe, h, u, v, w, phi, theta, psi, p, q, r]
+ros2 topic echo --once /quadrotor/state
+
+# Return motor commands to hover speed
+ros2 topic pub --once \
+/quadrotor/motor_commands \
+std_msgs/msg/Float64MultiArray \
+"{data: [495.23, 495.23, 495.23, 495.23]}"
+
