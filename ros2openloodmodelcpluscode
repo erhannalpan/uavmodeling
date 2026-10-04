@@ -1,62 +1,527 @@
+#include <algorithm>
+#include <array>
+#include <chrono>
 #include <cmath>
+#include <functional>
 #include <memory>
 
 #include "rclcpp/rclcpp.hpp"
+#include "std_msgs/msg/float64_multi_array.hpp"
 
 class QuadrotorModelNode : public rclcpp::Node
 {
 public:
+    using State = std::array<double, 16>;
+
+    enum StateIndex
+    {
+        PN = 0,
+        PE,
+        H,
+        U,
+        V,
+        W,
+        PHI,
+        THETA,
+        PSI,
+        P,
+        Q,
+        R,
+        OMEGA_F,
+        OMEGA_R,
+        OMEGA_B,
+        OMEGA_L
+    };
+
+    struct ControlData
+    {
+        std::array<double, 4> omega{};
+        std::array<double, 4> thrust{};
+        std::array<double, 4> reaction_torque{};
+
+        double total_thrust{0.0};
+        double tau_phi{0.0};
+        double tau_theta{0.0};
+        double tau_psi{0.0};
+    };
+
     QuadrotorModelNode()
     : Node("quadrotor_model_node")
     {
-        // Physical parameters
-        m_ = 1.0;
-        g_ = 9.81;
-        arm_length_ = 0.20;
+        declareParameters();
+        readParameters();
 
-        jx_ = 0.01;
-        jy_ = 0.01;
-        jz_ = 0.02;
+        omega_hover_ =
+            std::sqrt((mass_ * gravity_) / (4.0 * kf_));
 
-        kf_ = 1.0e-5;
-        km_ = 2.0e-7;
+        state_.fill(0.0);
+        omega_command_.fill(0.0);
 
-        tau_propeller_ = 0.12;
+        if (start_at_hover_)
+        {
+            state_[OMEGA_F] = omega_hover_;
+            state_[OMEGA_R] = omega_hover_;
+            state_[OMEGA_B] = omega_hover_;
+            state_[OMEGA_L] = omega_hover_;
 
-        omega_min_ = 0.0;
-        omega_max_ = 1000.0;
+            omega_command_.fill(omega_hover_);
+        }
 
-        // Hover speed
-        omega_hover_ = std::sqrt(
-            (m_ * g_) / (4.0 * kf_)
-        );
+        motor_command_subscriber_ =
+            this->create_subscription<
+                std_msgs::msg::Float64MultiArray>(
+                "/quadrotor/motor_commands",
+                10,
+                std::bind(
+                    &QuadrotorModelNode::motorCommandCallback,
+                    this,
+                    std::placeholders::_1));
+
+        state_publisher_ =
+            this->create_publisher<
+                std_msgs::msg::Float64MultiArray>(
+                "/quadrotor/state",
+                10);
+
+        motor_data_publisher_ =
+            this->create_publisher<
+                std_msgs::msg::Float64MultiArray>(
+                "/quadrotor/motor_data",
+                10);
+
+        control_input_publisher_ =
+            this->create_publisher<
+                std_msgs::msg::Float64MultiArray>(
+                "/quadrotor/control_input",
+                10);
+
+        const auto timer_period =
+            std::chrono::duration_cast<std::chrono::nanoseconds>(
+                std::chrono::duration<double>(dt_));
+
+        timer_ = this->create_wall_timer(
+            timer_period,
+            std::bind(
+                &QuadrotorModelNode::simulationStep,
+                this));
 
         constexpr double pi = 3.14159265358979323846;
 
-        omega_hover_rpm_ =
+        const double hover_rpm =
             omega_hover_ * 60.0 / (2.0 * pi);
 
         RCLCPP_INFO(
             this->get_logger(),
-            "Quadrotor model node started."
-        );
+            "Complete nonlinear quadrotor model started.");
 
         RCLCPP_INFO(
             this->get_logger(),
             "Hover speed: %.2f rad/s",
-            omega_hover_
-        );
+            omega_hover_);
 
         RCLCPP_INFO(
             this->get_logger(),
             "Hover speed: %.2f RPM",
-            omega_hover_rpm_
-        );
+            hover_rpm);
+
+        RCLCPP_INFO(
+            this->get_logger(),
+            "Simulation frequency: %.1f Hz",
+            1.0 / dt_);
     }
 
 private:
-    double m_;
-    double g_;
+    void declareParameters()
+    {
+        this->declare_parameter<double>("mass", 1.0);
+        this->declare_parameter<double>("gravity", 9.81);
+        this->declare_parameter<double>("arm_length", 0.20);
+
+        this->declare_parameter<double>("Jx", 0.01);
+        this->declare_parameter<double>("Jy", 0.01);
+        this->declare_parameter<double>("Jz", 0.02);
+
+        this->declare_parameter<double>("kf", 1.0e-5);
+        this->declare_parameter<double>("km", 2.0e-7);
+
+        this->declare_parameter<double>(
+            "tau_propeller",
+            0.12);
+
+        this->declare_parameter<double>("omega_min", 0.0);
+        this->declare_parameter<double>("omega_max", 1000.0);
+
+        this->declare_parameter<double>(
+            "simulation_step",
+            0.005);
+
+        this->declare_parameter<bool>(
+            "start_at_hover",
+            true);
+    }
+
+    void readParameters()
+    {
+        mass_ =
+            this->get_parameter("mass").as_double();
+
+        gravity_ =
+            this->get_parameter("gravity").as_double();
+
+        arm_length_ =
+            this->get_parameter("arm_length").as_double();
+
+        jx_ =
+            this->get_parameter("Jx").as_double();
+
+        jy_ =
+            this->get_parameter("Jy").as_double();
+
+        jz_ =
+            this->get_parameter("Jz").as_double();
+
+        kf_ =
+            this->get_parameter("kf").as_double();
+
+        km_ =
+            this->get_parameter("km").as_double();
+
+        tau_propeller_ =
+            this->get_parameter("tau_propeller").as_double();
+
+        omega_min_ =
+            this->get_parameter("omega_min").as_double();
+
+        omega_max_ =
+            this->get_parameter("omega_max").as_double();
+
+        dt_ =
+            this->get_parameter("simulation_step").as_double();
+
+        start_at_hover_ =
+            this->get_parameter("start_at_hover").as_bool();
+    }
+
+    void motorCommandCallback(
+        const std_msgs::msg::Float64MultiArray::SharedPtr message)
+    {
+        if (message->data.size() != 4)
+        {
+            RCLCPP_WARN(
+                this->get_logger(),
+                "Motor command must contain exactly four values.");
+
+            return;
+        }
+
+        for (std::size_t i = 0; i < 4; ++i)
+        {
+            omega_command_[i] = std::clamp(
+                message->data[i],
+                omega_min_,
+                omega_max_);
+        }
+    }
+
+    ControlData calculateControl(
+        const State & state) const
+    {
+        ControlData control;
+
+        control.omega[0] = state[OMEGA_F];
+        control.omega[1] = state[OMEGA_R];
+        control.omega[2] = state[OMEGA_B];
+        control.omega[3] = state[OMEGA_L];
+
+        for (std::size_t i = 0; i < 4; ++i)
+        {
+            const double omega_squared =
+                control.omega[i] * control.omega[i];
+
+            control.thrust[i] =
+                kf_ * omega_squared;
+
+            control.reaction_torque[i] =
+                km_ * omega_squared;
+        }
+
+        const double thrust_f = control.thrust[0];
+        const double thrust_r = control.thrust[1];
+        const double thrust_b = control.thrust[2];
+        const double thrust_l = control.thrust[3];
+
+        const double torque_f =
+            control.reaction_torque[0];
+
+        const double torque_r =
+            control.reaction_torque[1];
+
+        const double torque_b =
+            control.reaction_torque[2];
+
+        const double torque_l =
+            control.reaction_torque[3];
+
+        control.total_thrust =
+            thrust_f + thrust_r + thrust_b + thrust_l;
+
+        control.tau_phi =
+            arm_length_ * (thrust_l - thrust_r);
+
+        control.tau_theta =
+            arm_length_ * (thrust_f - thrust_b);
+
+        control.tau_psi =
+            -torque_f + torque_r - torque_b + torque_l;
+
+        return control;
+    }
+
+    State calculateDerivative(
+        const State & state) const
+    {
+        State derivative{};
+        derivative.fill(0.0);
+
+        const ControlData control =
+            calculateControl(state);
+
+        const double u = state[U];
+        const double v = state[V];
+        const double w = state[W];
+
+        const double phi = state[PHI];
+        const double theta = state[THETA];
+        const double psi = state[PSI];
+
+        const double p = state[P];
+        const double q = state[Q];
+        const double r = state[R];
+
+        const double sin_phi = std::sin(phi);
+        const double cos_phi = std::cos(phi);
+
+        const double sin_theta = std::sin(theta);
+        const double cos_theta = std::cos(theta);
+
+        const double sin_psi = std::sin(psi);
+        const double cos_psi = std::cos(psi);
+
+        double safe_cos_theta = cos_theta;
+
+        if (std::abs(safe_cos_theta) < 1.0e-6)
+        {
+            safe_cos_theta =
+                std::copysign(1.0e-6, safe_cos_theta);
+        }
+
+        const double tan_theta =
+            sin_theta / safe_cos_theta;
+
+        // Position kinematics: body FRD to inertial NED/altitude
+        derivative[PN] =
+            cos_theta * cos_psi * u
+            + (sin_phi * sin_theta * cos_psi
+            - cos_phi * sin_psi) * v
+            + (cos_phi * sin_theta * cos_psi
+            + sin_phi * sin_psi) * w;
+
+        derivative[PE] =
+            cos_theta * sin_psi * u
+            + (sin_phi * sin_theta * sin_psi
+            + cos_phi * cos_psi) * v
+            + (cos_phi * sin_theta * sin_psi
+            - sin_phi * cos_psi) * w;
+
+        derivative[H] =
+            sin_theta * u
+            - sin_phi * cos_theta * v
+            - cos_phi * cos_theta * w;
+
+        // Body-frame translational dynamics
+        derivative[U] =
+            r * v - q * w
+            - gravity_ * sin_theta;
+
+        derivative[V] =
+            p * w - r * u
+            + gravity_ * cos_theta * sin_phi;
+
+        derivative[W] =
+            q * u - p * v
+            + gravity_ * cos_theta * cos_phi
+            - control.total_thrust / mass_;
+
+        // Euler-angle kinematics
+        derivative[PHI] =
+            p
+            + q * sin_phi * tan_theta
+            + r * cos_phi * tan_theta;
+
+        derivative[THETA] =
+            q * cos_phi - r * sin_phi;
+
+        derivative[PSI] =
+            q * sin_phi / safe_cos_theta
+            + r * cos_phi / safe_cos_theta;
+
+        // Rotational rigid-body dynamics
+        derivative[P] =
+            ((jy_ - jz_) / jx_) * q * r
+            + control.tau_phi / jx_;
+
+        derivative[Q] =
+            ((jz_ - jx_) / jy_) * p * r
+            + control.tau_theta / jy_;
+
+        derivative[R] =
+            ((jx_ - jy_) / jz_) * p * q
+            + control.tau_psi / jz_;
+
+        // First-order propeller dynamics
+        derivative[OMEGA_F] =
+            (omega_command_[0] - state[OMEGA_F])
+            / tau_propeller_;
+
+        derivative[OMEGA_R] =
+            (omega_command_[1] - state[OMEGA_R])
+            / tau_propeller_;
+
+        derivative[OMEGA_B] =
+            (omega_command_[2] - state[OMEGA_B])
+            / tau_propeller_;
+
+        derivative[OMEGA_L] =
+            (omega_command_[3] - state[OMEGA_L])
+            / tau_propeller_;
+
+        return derivative;
+    }
+
+    State addScaledState(
+        const State & state,
+        const State & derivative,
+        double scale) const
+    {
+        State result{};
+
+        for (std::size_t i = 0; i < result.size(); ++i)
+        {
+            result[i] =
+                state[i] + scale * derivative[i];
+        }
+
+        return result;
+    }
+
+    void rk4Step()
+    {
+        const State k1 =
+            calculateDerivative(state_);
+
+        const State temporary_2 =
+            addScaledState(state_, k1, 0.5 * dt_);
+
+        const State k2 =
+            calculateDerivative(temporary_2);
+
+        const State temporary_3 =
+            addScaledState(state_, k2, 0.5 * dt_);
+
+        const State k3 =
+            calculateDerivative(temporary_3);
+
+        const State temporary_4 =
+            addScaledState(state_, k3, dt_);
+
+        const State k4 =
+            calculateDerivative(temporary_4);
+
+        for (std::size_t i = 0; i < state_.size(); ++i)
+        {
+            state_[i] +=
+                (dt_ / 6.0)
+                * (k1[i]
+                + 2.0 * k2[i]
+                + 2.0 * k3[i]
+                + k4[i]);
+        }
+
+        for (std::size_t i = OMEGA_F; i <= OMEGA_L; ++i)
+        {
+            state_[i] = std::clamp(
+                state_[i],
+                omega_min_,
+                omega_max_);
+        }
+    }
+
+    void publishState()
+    {
+        std_msgs::msg::Float64MultiArray message;
+        message.data.reserve(12);
+
+        for (std::size_t i = PN; i <= R; ++i)
+        {
+            message.data.push_back(state_[i]);
+        }
+
+        state_publisher_->publish(message);
+    }
+
+    void publishMotorData(
+        const ControlData & control)
+    {
+        std_msgs::msg::Float64MultiArray message;
+        message.data.reserve(12);
+
+        for (const double value : control.omega)
+        {
+            message.data.push_back(value);
+        }
+
+        for (const double value : control.thrust)
+        {
+            message.data.push_back(value);
+        }
+
+        for (const double value : control.reaction_torque)
+        {
+            message.data.push_back(value);
+        }
+
+        motor_data_publisher_->publish(message);
+    }
+
+    void publishControlInput(
+        const ControlData & control)
+    {
+        std_msgs::msg::Float64MultiArray message;
+
+        message.data = {
+            control.total_thrust,
+            control.tau_phi,
+            control.tau_theta,
+            control.tau_psi
+        };
+
+        control_input_publisher_->publish(message);
+    }
+
+    void simulationStep()
+    {
+        rk4Step();
+
+        const ControlData control =
+            calculateControl(state_);
+
+        publishState();
+        publishMotorData(control);
+        publishControlInput(control);
+    }
+
+    double mass_;
+    double gravity_;
     double arm_length_;
 
     double jx_;
@@ -67,12 +532,34 @@ private:
     double km_;
 
     double tau_propeller_;
-
     double omega_min_;
     double omega_max_;
+    double dt_;
+
+    bool start_at_hover_;
 
     double omega_hover_;
-    double omega_hover_rpm_;
+
+    State state_{};
+    std::array<double, 4> omega_command_{};
+
+    rclcpp::Subscription<
+        std_msgs::msg::Float64MultiArray>::SharedPtr
+        motor_command_subscriber_;
+
+    rclcpp::Publisher<
+        std_msgs::msg::Float64MultiArray>::SharedPtr
+        state_publisher_;
+
+    rclcpp::Publisher<
+        std_msgs::msg::Float64MultiArray>::SharedPtr
+        motor_data_publisher_;
+
+    rclcpp::Publisher<
+        std_msgs::msg::Float64MultiArray>::SharedPtr
+        control_input_publisher_;
+
+    rclcpp::TimerBase::SharedPtr timer_;
 };
 
 int main(int argc, char * argv[])
