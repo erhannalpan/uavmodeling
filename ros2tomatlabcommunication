@@ -1,0 +1,98 @@
+%% ROS 2 to MATLAB communication
+
+setenv("ROS_DOMAIN_ID","0");
+
+% Create a MATLAB ROS 2 node
+matlabNode = ros2node("/matlab_quadrotor_viewer");
+
+% Subscribe to the 12-state vector
+stateSub = ros2subscriber( ...
+    matlabNode, ...
+    "/quadrotor/state", ...
+    "std_msgs/Float64MultiArray");
+
+% Subscribe to the calculated control input
+controlSub = ros2subscriber( ...
+    matlabNode, ...
+    "/quadrotor/control_input", ...
+    "std_msgs/Float64MultiArray");
+
+% Subscribe to motor data
+motorSub = ros2subscriber( ...
+    matlabNode, ...
+    "/quadrotor/motor_data", ...
+    "std_msgs/Float64MultiArray");
+
+%% Receive one message from each topic
+
+stateMsg = receive(stateSub,10);
+controlMsg = receive(controlSub,10);
+motorMsg = receive(motorSub,10);
+
+x_ros = double(stateMsg.data(:));
+control_ros = double(controlMsg.data(:));
+motor_ros = double(motorMsg.data(:));
+
+%% Separate the 12 states
+
+pn    = x_ros(1);
+pe    = x_ros(2);
+h     = x_ros(3);
+
+u     = x_ros(4);
+v     = x_ros(5);
+w     = x_ros(6);
+
+phi   = x_ros(7);
+theta = x_ros(8);
+psi   = x_ros(9);
+
+p     = x_ros(10);
+q     = x_ros(11);
+r     = x_ros(12);
+
+%% Separate the control inputs
+
+F_total   = control_ros(1);
+tau_phi   = control_ros(2);
+tau_theta = control_ros(3);
+tau_psi   = control_ros(4);
+
+%% Separate motor data
+
+omega_ros  = motor_ros(1:4);
+thrust_ros = motor_ros(5:8);
+torque_ros = motor_ros(9:12);
+
+%% Display the pitch-test results
+
+fprintf("\n--- ROS Pitch Test ---\n");
+fprintf("Total thrust : %.6f N\n",F_total);
+fprintf("Pitch torque : %.6f N m\n",tau_theta);
+fprintf("Pitch angle  : %.6f rad\n",theta);
+fprintf("Pitch angle  : %.6f deg\n",rad2deg(theta));
+fprintf("Pitch rate   : %.6f rad/s\n",q);
+
+%% Display all states as a table
+
+stateNames = [
+    "pn"
+    "pe"
+    "h"
+    "u"
+    "v"
+    "w"
+    "phi"
+    "theta"
+    "psi"
+    "p"
+    "q"
+    "r"
+];
+
+stateTable = table( ...
+    stateNames, ...
+    x_ros, ...
+    'VariableNames',{"State","Value"});
+
+disp(stateTable);
