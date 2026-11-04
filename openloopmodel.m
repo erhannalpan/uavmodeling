@@ -1,0 +1,63 @@
+% Original initialization script for uav_open_loop.slx; values unchanged.
+% Run this script in the MATLAB base workspace before running the model.
+% m is TOTAL mass (base + four rotors). Jx/Jy/Jz are the equivalent TOTAL
+% inertias; they differ from the base_link-only tensor in Gazebo model.sdf.
+% tau_propeller=0.12 s matches both motor rise/fall constants in Gazebo.
+% The four reference speeds branch to ROS BEFORE the local motor dynamics.
+% This script initializes parameters and draws the thrust/reaction-torque
+% curves. The SLX stores references, initial vehicle state, and ROS blocks.
+% omega_min/max bound the static sweep; no saturation is added to the model.
+
+
+%% Quadrotor parameters
+
+m  = 1.0;       % Total mass [kg]
+g  = 9.81;      % Gravitational acceleration [m/s^2]
+L  = 0.20;      % Motor-to-centre distance [m]
+
+Jx = 0.01085536;    % Roll moment of inertia [kg*m^2]
+Jy = 0.01085536;    % Pitch moment of inertia [kg*m^2]
+Jz = 0.02168;       % Yaw moment of inertia [kg*m^2]
+    
+kf = 1.0e-5;    % Thrust coefficient [N/(rad/s)^2]
+km = 2.0e-7;    % Reaction-torque coefficient [N*m/(rad/s)^2]
+
+% Motor acceleration time constant [s]
+tau_propeller = 0.12; % Motor deceleration time constant [s]
+
+omega_min = 0;    % Minimum propeller speed [rad/s]
+omega_max = 1000; % Maximum propeller speed [rad/s]
+
+J = diag([Jx Jy Jz]);  % Inertia Matrix for the quadrator
+
+
+% Propeller Dynamics (Thrust & Angular Velocity & Reaction (Yawing) Torque Relation)
+omega = linspace(omega_min, omega_max, 500);
+
+thrust = kf .* omega.^2;
+torque = km .* omega.^2;
+
+figure;
+
+subplot(2,1,1);
+plot(omega, thrust, 'LineWidth', 1.5);
+grid on;
+xlabel('Propeller speed \Omega [rad/s]');
+ylabel('Thrust F [N]');
+
+title('Propeller Speed–Thrust Relationship');
+subplot(2,1,2);
+plot(omega, torque, 'LineWidth', 1.5);
+grid on;
+xlabel('Propeller speed \Omega [rad/s]');
+ylabel('Reaction torque Q [N*m]');
+title('Propeller Speed–Torque Relationship');
+
+% Hover Speed 
+
+omega_hover = sqrt(m *g / (4 * kf));  % rad/s
+
+omega_hover_rpm=omega_hover * 60 / (2*pi);
+
+
+P=[m; g; Jx; Jy; Jz];
