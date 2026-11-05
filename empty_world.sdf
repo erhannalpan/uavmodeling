@@ -1,0 +1,133 @@
+<?xml version="1.0"?>
+<!--
+  empty_world.sdf
+  Original working world supplied by Erhan; explanatory comments added.
+  All original SDF elements, attributes, and values are preserved.
+
+  This is the WORLD file: it configures the environment and includes our UAV.
+  models/quadrotor/model.sdf separately defines the links, joints, masses,
+  inertias, motor systems, and odometry publisher of the vehicle.
+
+  CURRENT TEST CONFIGURATION
+  Physics maximum step: 0.001 s (1 ms).
+  Requested real-time factor: 1.0 (a target, not a synchronization guarantee).
+  Quadrotor initial model pose: x=0, y=0, z=20 m; roll=pitch=yaw=0 rad.
+  This is the 20 m pitch-test world. The earlier vertical test started at 2 m;
+  reproducing that case requires changing the include pose AND matching the
+  initial altitude in the analytical Simulink branch.
+
+  START FROM A TERMINAL
+  export GZ_SIM_RESOURCE_PATH="$HOME/ros2_ws/src/gazebo_matlab_cosim/models${GZ_SIM_RESOURCE_PATH:+:$GZ_SIM_RESOURCE_PATH}"
+  gz sim "$HOME/ros2_ws/src/gazebo_matlab_cosim/worlds/empty_world.sdf"
+
+  The resource path lets Gazebo resolve model://quadrotor below. Launch without
+  -r to prepare the test while paused. Start the bridge and adapter separately;
+  this file does not create a ROS motor-command publisher.
+-->
+<sdf version="1.9">
+
+  <!-- World name used by Gazebo; keep it consistent when addressing world
+       services. It is not the ROS node name or the ROS_DOMAIN_ID. -->
+  <world name="matlab_cosim_world">
+
+    <!-- Gravity in the world frame, in m/s^2. World +z points upward, so the
+         acceleration due to gravity has a negative z component. -->
+    <gravity>0 0 -9.81</gravity>
+
+    <!-- Gazebo Sim uses the Physics system below. The original physics type
+         attribute is retained. max_step_size is a physics integration setting,
+         separate from our 0.05 s ROS command/subscriber sample period.
+         real_time_factor=1 requests real-time operation; actual performance
+         depends on the computer. It does not make Gazebo and Simulink lockstep.
+         Compare states using Gazebo message timestamps, not elapsed wall time. -->
+    <physics name="physics" type="ignored">
+      <max_step_size>0.001</max_step_size>
+      <real_time_factor>1.0</real_time_factor>
+    </physics>
+
+    <!-- Physics: integrates the physical model, including gravity, rigid-body
+         motion, joints, and contacts. Motor systems are in the included model. -->
+    <plugin
+      filename="gz-sim-physics-system"
+      name="gz::sim::systems::Physics"/>
+
+    <!-- UserCommands: supports entity/world operations such as creating or
+         removing models. Its presence does not send motor-speed references. -->
+    <plugin
+      filename="gz-sim-user-commands-system"
+      name="gz::sim::systems::UserCommands"/>
+
+    <!-- SceneBroadcaster: provides scene updates used by the Gazebo GUI.
+         Visualization and ROS odometry are separate data paths. -->
+    <plugin
+      filename="gz-sim-scene-broadcaster-system"
+      name="gz::sim::systems::SceneBroadcaster"/>
+
+    <!-- Scene appearance. These rendering settings do not set aircraft mass,
+         inertia, thrust, or a controller parameter. Colors use RGBA values. -->
+    <scene>
+      <ambient>0.8 0.8 0.8 1</ambient>
+      <background>0.7 0.8 0.9 1</background>
+      <shadows>true</shadows>
+    </scene>
+
+    <!-- Directional illumination for viewing the vehicle and ground.
+         A pose is x y z roll pitch yaw, with metres and radians respectively.
+         The light direction is specified separately from its pose. -->
+    <light type="directional" name="sun">
+      <pose>0 0 10 0 0 0</pose>
+      <cast_shadows>true</cast_shadows>
+      <diffuse>0.8 0.8 0.8 1</diffuse>
+      <specular>0.2 0.2 0.2 1</specular>
+      <direction>-0.5 0.1 -0.9</direction>
+    </light>
+
+    <!-- Stationary ground model. There is no explicit ground pose here, so it
+         uses the default origin. The UAV must remain airborne during the model
+         comparison: our analytical equations do not include ground contact. -->
+    <model name="ground_plane">
+      <static>true</static>
+      <link name="ground_link">
+
+        <!-- Collision geometry participates in physics. The normal points up.
+             The plane size is retained exactly as in the working world. -->
+        <collision name="ground_collision">
+          <geometry>
+            <plane>
+              <normal>0 0 1</normal>
+              <size>100 100</size>
+            </plane>
+          </geometry>
+        </collision>
+
+        <!-- Visual geometry and material define the visible ground surface.
+             A visual alone would not provide collision/contact geometry. -->
+        <visual name="ground_visual">
+          <geometry>
+            <plane>
+              <normal>0 0 1</normal>
+              <size>100 100</size>
+            </plane>
+          </geometry>
+          <material>
+            <ambient>0.5 0.5 0.5 1</ambient>
+            <diffuse>0.6 0.6 0.6 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- Include the vehicle resource, using models/quadrotor/model.config and
+         its referenced model.sdf. GZ_SIM_RESOURCE_PATH must contain models/,
+         not only the quadrotor/ subdirectory.
+         The model pose is expressed in the world frame. It places the model
+         origin at 20 m; it does not specify motor speeds or override link COMs.
+         Set Simulink's h initial condition to 20 m for this pitch-test setup.
+         This initial pose is not a flight command and does not maintain height. -->
+    <include>
+      <uri>model://quadrotor</uri>
+      <name>quadrotor</name>
+      <pose>0 0 20 0 0 0</pose>
+    </include>
+  </world>
+</sdf>

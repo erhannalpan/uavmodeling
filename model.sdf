@@ -1,0 +1,410 @@
+<?xml version="1.0"?>
+<!--
+  Quadrotor physical model used by the project. The world file includes this
+  resource and supplies its initial pose. Comments explain the retained values.
+
+  World/body conventions and the combined-inertia calculation are documented in
+  README.md. Gazebo body axes: forward, left, up (FLU).
+  The MATLAB analytical body axes are forward, right, down (FRD).
+
+  Total mass: 0.96 kg base + 4 * 0.01 kg rotors = 1 kg.
+  Base inertia is NOT the whole-vehicle inertia. Retain the valid base tensor
+  diag(0.01,0.01,0.02); the equivalent combined tensor about the combined COM
+  is diag(0.01085536,0.01085536,0.02168) kg*m^2.
+
+  Command array order: front(0), right(1), back(2), left(3).
+  Speeds are positive reference magnitudes in rad/s. Rotation direction is
+  declared separately by turningDirection. Do not send already-filtered local
+  motor speeds: each Gazebo motor system applies its own 0.12 s motor lag.
+  Thrust coefficient = 1e-5; reaction coefficient = 2e-7. momentConstant=0.02
+  is their ratio, not the reaction coefficient itself.
+
+  Arms and rotor cylinders here are visuals, not added collision geometries.
+  The model has no added wind, ground-effect, or flight-control implementation.
+-->
+<sdf version="1.9">
+  <model name="quadrotor">
+    <!-- A dynamic vehicle: gravity/forces can change its motion. -->
+    <static>false</static>
+
+    <link name="base_link">
+      <!-- Original base-link inertia. Rotor links add their own contributions. -->
+      <!-- Link mass and local inertia tensor; units kg and kg*m^2. -->
+      <inertial>
+        <mass>0.96</mass>
+        <inertia>
+          <ixx>0.01</ixx>
+          <iyy>0.01</iyy>
+          <izz>0.02</izz>
+          <ixy>0</ixy>
+          <ixz>0</ixz>
+          <iyz>0</iyz>
+        </inertia>
+      </inertial>
+
+      <!-- Physical contact shape of the base. Flight comparisons exclude impacts. -->
+      <collision name="body_collision">
+        <geometry>
+          <box>
+            <size>0.12 0.12 0.05</size>
+          </box>
+        </geometry>
+      </collision>
+
+      <!-- Visible base geometry/material; rendering does not define its mass. -->
+      <visual name="body_visual">
+        <geometry>
+          <box>
+            <size>0.12 0.12 0.05</size>
+          </box>
+        </geometry>
+        <material>
+          <ambient>0.1 0.1 0.1 1</ambient>
+          <diffuse>0.15 0.15 0.15 1</diffuse>
+        </material>
+      </visual>
+
+      <visual name="front_back_arm">
+        <geometry>
+          <box>
+            <size>0.40 0.02 0.015</size>
+          </box>
+        </geometry>
+        <material>
+          <ambient>0.8 0.1 0.1 1</ambient>
+          <diffuse>0.8 0.1 0.1 1</diffuse>
+        </material>
+      </visual>
+
+      <visual name="left_right_arm">
+        <geometry>
+          <box>
+            <size>0.02 0.40 0.015</size>
+          </box>
+        </geometry>
+        <material>
+          <ambient>0.2 0.2 0.2 1</ambient>
+          <diffuse>0.3 0.3 0.3 1</diffuse>
+        </material>
+      </visual>
+    </link>
+
+    <!-- Front rotor -->
+    <link name="rotor_front">
+      <pose>0.20 0 0.02 0 0 0</pose>
+      <!-- Link mass and local inertia tensor; units kg and kg*m^2. -->
+      <inertial>
+        <mass>0.01</mass>
+        <inertia>
+          <ixx>0.00001</ixx>
+          <iyy>0.00001</iyy>
+          <izz>0.00002</izz>
+          <ixy>0</ixy>
+          <ixz>0</ixz>
+          <iyz>0</iyz>
+        </inertia>
+      </inertial>
+      <visual name="rotor_front_visual">
+        <geometry>
+          <cylinder>
+            <radius>0.08</radius>
+            <length>0.005</length>
+          </cylinder>
+        </geometry>
+        <material>
+          <ambient>0.9 0.1 0.1 0.7</ambient>
+          <diffuse>0.9 0.1 0.1 0.7</diffuse>
+        </material>
+      </visual>
+    </link>
+
+    <!-- Right rotor -->
+    <link name="rotor_right">
+      <pose>0 -0.20 0.02 0 0 0</pose>
+      <!-- Link mass and local inertia tensor; units kg and kg*m^2. -->
+      <inertial>
+        <mass>0.01</mass>
+        <inertia>
+          <ixx>0.00001</ixx>
+          <iyy>0.00001</iyy>
+          <izz>0.00002</izz>
+          <ixy>0</ixy>
+          <ixz>0</ixz>
+          <iyz>0</iyz>
+        </inertia>
+      </inertial>
+      <visual name="rotor_right_visual">
+        <geometry>
+          <cylinder>
+            <radius>0.08</radius>
+            <length>0.005</length>
+          </cylinder>
+        </geometry>
+        <material>
+          <ambient>0.2 0.2 0.2 0.7</ambient>
+          <diffuse>0.3 0.3 0.3 0.7</diffuse>
+        </material>
+      </visual>
+    </link>
+
+    <!-- Back rotor -->
+    <link name="rotor_back">
+      <pose>-0.20 0 0.02 0 0 0</pose>
+      <!-- Link mass and local inertia tensor; units kg and kg*m^2. -->
+      <inertial>
+        <mass>0.01</mass>
+        <inertia>
+          <ixx>0.00001</ixx>
+          <iyy>0.00001</iyy>
+          <izz>0.00002</izz>
+          <ixy>0</ixy>
+          <ixz>0</ixz>
+          <iyz>0</iyz>
+        </inertia>
+      </inertial>
+      <visual name="rotor_back_visual">
+        <geometry>
+          <cylinder>
+            <radius>0.08</radius>
+            <length>0.005</length>
+          </cylinder>
+        </geometry>
+        <material>
+          <ambient>0.2 0.2 0.2 0.7</ambient>
+          <diffuse>0.3 0.3 0.3 0.7</diffuse>
+        </material>
+      </visual>
+    </link>
+
+    <!-- Left rotor -->
+    <link name="rotor_left">
+      <pose>0 0.20 0.02 0 0 0</pose>
+      <!-- Link mass and local inertia tensor; units kg and kg*m^2. -->
+      <inertial>
+        <mass>0.01</mass>
+        <inertia>
+          <ixx>0.00001</ixx>
+          <iyy>0.00001</iyy>
+          <izz>0.00002</izz>
+          <ixy>0</ixy>
+          <ixz>0</ixz>
+          <iyz>0</iyz>
+        </inertia>
+      </inertial>
+      <visual name="rotor_left_visual">
+        <geometry>
+          <cylinder>
+            <radius>0.08</radius>
+            <length>0.005</length>
+          </cylinder>
+        </geometry>
+        <material>
+          <ambient>0.2 0.2 0.2 0.7</ambient>
+          <diffuse>0.3 0.3 0.3 0.7</diffuse>
+        </material>
+      </visual>
+    </link>
+
+    <!-- Rotor joints -->
+    <!-- Rotor joints allow rotation about local +Z, connected to base_link. -->
+    <joint name="rotor_front_joint" type="revolute">
+      <parent>base_link</parent>
+      <child>rotor_front</child>
+      <axis>
+        <xyz>0 0 1</xyz>
+        <limit>
+          <lower>-1e16</lower>
+          <upper>1e16</upper>
+        </limit>
+      </axis>
+    </joint>
+
+    <joint name="rotor_right_joint" type="revolute">
+      <parent>base_link</parent>
+      <child>rotor_right</child>
+      <axis>
+        <xyz>0 0 1</xyz>
+        <limit>
+          <lower>-1e16</lower>
+          <upper>1e16</upper>
+        </limit>
+      </axis>
+    </joint>
+
+    <joint name="rotor_back_joint" type="revolute">
+      <parent>base_link</parent>
+      <child>rotor_back</child>
+      <axis>
+        <xyz>0 0 1</xyz>
+        <limit>
+          <lower>-1e16</lower>
+          <upper>1e16</upper>
+        </limit>
+      </axis>
+    </joint>
+
+    <joint name="rotor_left_joint" type="revolute">
+      <parent>base_link</parent>
+      <child>rotor_left</child>
+      <axis>
+        <xyz>0 0 1</xyz>
+        <limit>
+          <lower>-1e16</lower>
+          <upper>1e16</upper>
+        </limit>
+      </axis>
+    </joint>
+
+    <!-- Motor 0: Front, CCW -->
+    <plugin filename="gz-sim-multicopter-motor-model-system"
+            name="gz::sim::systems::MulticopterMotorModel">
+      <!-- Prefix used to form the vehicle command topic. -->
+      <robotNamespace>quadrotor</robotNamespace>
+      <!-- The joint and rotor link controlled by this motor instance. -->
+      <jointName>rotor_front_joint</jointName>
+      <linkName>rotor_front</linkName>
+      <!-- Rotation sense, paired with motorNumber/order; command stays positive. -->
+      <turningDirection>ccw</turningDirection>
+      <!-- Read speed references from the Actuators velocity array. -->
+      <motorType>velocity</motorType>
+      <!-- First-order speed rise/fall time constants [s], matching MATLAB. -->
+      <timeConstantUp>0.12</timeConstantUp>
+      <timeConstantDown>0.12</timeConstantDown>
+      <!-- Maximum motor angular-speed magnitude [rad/s]. -->
+      <maxRotVelocity>1000.0</maxRotVelocity>
+      <!-- Thrust = motorConstant * actual_speed^2, in N. -->
+      <motorConstant>1.0e-5</motorConstant>
+      <!-- Reaction torque / thrust ratio [m]: km/kf = 0.02. -->
+      <momentConstant>0.02</momentConstant>
+      <!-- With namespace above: /quadrotor/command/motor_speed. -->
+      <commandSubTopic>command/motor_speed</commandSubTopic>
+      <!-- ZERO-BASED index of this motor in the incoming speed array. -->
+      <motorNumber>0</motorNumber>
+      <!-- Extra rotor-drag/rolling-moment effects disabled in these tests. -->
+      <rotorDragCoefficient>0</rotorDragCoefficient>
+      <rollingMomentCoefficient>0</rollingMomentCoefficient>
+      <!-- Per-motor speed output topic; not used by our state comparison. -->
+      <motorSpeedPubTopic>motor_speed/0</motorSpeedPubTopic>
+      <!-- Joint-speed visualization scaling; keep commanded speed in rad/s. -->
+      <rotorVelocitySlowdownSim>10</rotorVelocitySlowdownSim>
+    </plugin>
+
+    <!-- Motor 1: Right, CW -->
+    <plugin filename="gz-sim-multicopter-motor-model-system"
+            name="gz::sim::systems::MulticopterMotorModel">
+      <!-- Prefix used to form the vehicle command topic. -->
+      <robotNamespace>quadrotor</robotNamespace>
+      <!-- The joint and rotor link controlled by this motor instance. -->
+      <jointName>rotor_right_joint</jointName>
+      <linkName>rotor_right</linkName>
+      <!-- Rotation sense, paired with motorNumber/order; command stays positive. -->
+      <turningDirection>cw</turningDirection>
+      <!-- Read speed references from the Actuators velocity array. -->
+      <motorType>velocity</motorType>
+      <!-- First-order speed rise/fall time constants [s], matching MATLAB. -->
+      <timeConstantUp>0.12</timeConstantUp>
+      <timeConstantDown>0.12</timeConstantDown>
+      <!-- Maximum motor angular-speed magnitude [rad/s]. -->
+      <maxRotVelocity>1000.0</maxRotVelocity>
+      <!-- Thrust = motorConstant * actual_speed^2, in N. -->
+      <motorConstant>1.0e-5</motorConstant>
+      <!-- Reaction torque / thrust ratio [m]: km/kf = 0.02. -->
+      <momentConstant>0.02</momentConstant>
+      <!-- With namespace above: /quadrotor/command/motor_speed. -->
+      <commandSubTopic>command/motor_speed</commandSubTopic>
+      <!-- ZERO-BASED index of this motor in the incoming speed array. -->
+      <motorNumber>1</motorNumber>
+      <!-- Extra rotor-drag/rolling-moment effects disabled in these tests. -->
+      <rotorDragCoefficient>0</rotorDragCoefficient>
+      <rollingMomentCoefficient>0</rollingMomentCoefficient>
+      <!-- Per-motor speed output topic; not used by our state comparison. -->
+      <motorSpeedPubTopic>motor_speed/1</motorSpeedPubTopic>
+      <!-- Joint-speed visualization scaling; keep commanded speed in rad/s. -->
+      <rotorVelocitySlowdownSim>10</rotorVelocitySlowdownSim>
+    </plugin>
+
+    <!-- Motor 2: Back, CCW -->
+    <plugin filename="gz-sim-multicopter-motor-model-system"
+            name="gz::sim::systems::MulticopterMotorModel">
+      <!-- Prefix used to form the vehicle command topic. -->
+      <robotNamespace>quadrotor</robotNamespace>
+      <!-- The joint and rotor link controlled by this motor instance. -->
+      <jointName>rotor_back_joint</jointName>
+      <linkName>rotor_back</linkName>
+      <!-- Rotation sense, paired with motorNumber/order; command stays positive. -->
+      <turningDirection>ccw</turningDirection>
+      <!-- Read speed references from the Actuators velocity array. -->
+      <motorType>velocity</motorType>
+      <!-- First-order speed rise/fall time constants [s], matching MATLAB. -->
+      <timeConstantUp>0.12</timeConstantUp>
+      <timeConstantDown>0.12</timeConstantDown>
+      <!-- Maximum motor angular-speed magnitude [rad/s]. -->
+      <maxRotVelocity>1000.0</maxRotVelocity>
+      <!-- Thrust = motorConstant * actual_speed^2, in N. -->
+      <motorConstant>1.0e-5</motorConstant>
+      <!-- Reaction torque / thrust ratio [m]: km/kf = 0.02. -->
+      <momentConstant>0.02</momentConstant>
+      <!-- With namespace above: /quadrotor/command/motor_speed. -->
+      <commandSubTopic>command/motor_speed</commandSubTopic>
+      <!-- ZERO-BASED index of this motor in the incoming speed array. -->
+      <motorNumber>2</motorNumber>
+      <!-- Extra rotor-drag/rolling-moment effects disabled in these tests. -->
+      <rotorDragCoefficient>0</rotorDragCoefficient>
+      <rollingMomentCoefficient>0</rollingMomentCoefficient>
+      <!-- Per-motor speed output topic; not used by our state comparison. -->
+      <motorSpeedPubTopic>motor_speed/2</motorSpeedPubTopic>
+      <!-- Joint-speed visualization scaling; keep commanded speed in rad/s. -->
+      <rotorVelocitySlowdownSim>10</rotorVelocitySlowdownSim>
+    </plugin>
+
+    <!-- Motor 3: Left, CW -->
+    <plugin filename="gz-sim-multicopter-motor-model-system"
+            name="gz::sim::systems::MulticopterMotorModel">
+      <!-- Prefix used to form the vehicle command topic. -->
+      <robotNamespace>quadrotor</robotNamespace>
+      <!-- The joint and rotor link controlled by this motor instance. -->
+      <jointName>rotor_left_joint</jointName>
+      <linkName>rotor_left</linkName>
+      <!-- Rotation sense, paired with motorNumber/order; command stays positive. -->
+      <turningDirection>cw</turningDirection>
+      <!-- Read speed references from the Actuators velocity array. -->
+      <motorType>velocity</motorType>
+      <!-- First-order speed rise/fall time constants [s], matching MATLAB. -->
+      <timeConstantUp>0.12</timeConstantUp>
+      <timeConstantDown>0.12</timeConstantDown>
+      <!-- Maximum motor angular-speed magnitude [rad/s]. -->
+      <maxRotVelocity>1000.0</maxRotVelocity>
+      <!-- Thrust = motorConstant * actual_speed^2, in N. -->
+      <motorConstant>1.0e-5</motorConstant>
+      <!-- Reaction torque / thrust ratio [m]: km/kf = 0.02. -->
+      <momentConstant>0.02</momentConstant>
+      <!-- With namespace above: /quadrotor/command/motor_speed. -->
+      <commandSubTopic>command/motor_speed</commandSubTopic>
+      <!-- ZERO-BASED index of this motor in the incoming speed array. -->
+      <motorNumber>3</motorNumber>
+      <!-- Extra rotor-drag/rolling-moment effects disabled in these tests. -->
+      <rotorDragCoefficient>0</rotorDragCoefficient>
+      <rollingMomentCoefficient>0</rollingMomentCoefficient>
+      <!-- Per-motor speed output topic; not used by our state comparison. -->
+      <motorSpeedPubTopic>motor_speed/3</motorSpeedPubTopic>
+      <!-- Joint-speed visualization scaling; keep commanded speed in rad/s. -->
+      <rotorVelocitySlowdownSim>10</rotorVelocitySlowdownSim>
+    </plugin>
+
+    <!-- Odometry publisher -->
+    <plugin filename="gz-sim-odometry-publisher-system"
+            name="gz::sim::systems::OdometryPublisher">
+      <!-- Odometry pose reference frame and child/base frame labels. -->
+      <odom_frame>world</odom_frame>
+      <robot_base_frame>base_link</robot_base_frame>
+      <!-- Measurement topic mapped back to ROS by ros_gz_bridge. -->
+      <odom_topic>/quadrotor/odometry</odom_topic>
+      <tf_topic>/quadrotor/tf</tf_topic>
+      <!-- Source odometry rate [Hz]; Simulink samples latest output at 20 Hz. -->
+      <odom_publish_frequency>200</odom_publish_frequency>
+      <!-- Publish 3D pose/twist, required for pitch/vertical comparisons. -->
+      <dimensions>3</dimensions>
+    </plugin>
+
+  </model>
+</sdf>

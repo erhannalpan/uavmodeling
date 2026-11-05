@@ -1,0 +1,65 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<!--
+  package.xml
+  Original working manifest supplied by Erhan; explanatory comments added.
+  All original element names, values, and dependency declarations are retained.
+
+  LOCATION
+  Put this file in the gazebo_matlab_cosim package root, beside CMakeLists.txt.
+  ROS tooling reads this manifest to identify the package, its build system,
+  and its dependencies. CMakeLists.txt defines how the executable is compiled.
+
+  ROLE IN THE PROJECT
+  This package contains motor_command_adapter, which receives four motor-speed
+  references on /quadrotor/matlab_motor_commands and publishes them in the
+  velocity array of Actuators on /quadrotor/command/motor_speed.
+  The adapter converts ROS message types; ros_gz_bridge runs separately and
+  translates messages between ROS 2 and Gazebo Transport.
+
+  This manifest describes the adapter's declared ROS dependencies. It does not
+  install MATLAB, configure Simulink, start Gazebo, or launch the bridge.
+  The reproduction guide must also explain those environment/setup steps.
+-->
+<package format="3">
+  <!-- Package name used by colcon and ros2. Match project(...) in CMakeLists.txt. -->
+  <name>gazebo_matlab_cosim</name>
+
+  <!-- Original package version and description, retained from the working file. -->
+  <version>0.0.0</version>
+  <description>TODO: Package description</description>
+
+  <!-- Original maintainer/contact and declared license metadata. -->
+  <maintainer email="erhan@todo.todo">erhan</maintainer>
+  <license>Apache-2.0</license>
+
+  <!-- Build-system dependency: ament_cmake supplies the ROS 2 CMake integration,
+       including ament_target_dependencies(...) and ament_package(). -->
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <!-- A depend entry covers build, build-export, and execution dependencies.
+       These packages provide the C++ APIs/message types used by our adapter. -->
+
+  <!-- rclcpp: Node, publisher/subscriber creation, callback execution, logging,
+       initialization, and shutdown in motor_command_adapter.cpp. -->
+  <depend>rclcpp</depend>
+
+  <!-- std_msgs: incoming std_msgs/msg/Float64MultiArray. Its data array carries
+       [front, right, back, left] motor-speed references in rad/s. -->
+  <depend>std_msgs</depend>
+
+  <!-- actuator_msgs: outgoing actuator_msgs/msg/Actuators. The adapter copies
+       the same four reference values into the velocity field without scaling. -->
+  <depend>actuator_msgs</depend>
+
+  <!-- Development/test dependencies for the BUILD_TESTING CMake section.
+       These support lint checks, not Gazebo flight tests or numerical validation.
+       The existing CMakeLists.txt explicitly skips copyright and cpplint checks. -->
+  <test_depend>ament_lint_auto</test_depend>
+  <test_depend>ament_lint_common</test_depend>
+
+  <!-- Tell colcon that this package uses the ament_cmake build system. -->
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>
